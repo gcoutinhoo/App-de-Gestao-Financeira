@@ -4,75 +4,58 @@ import { supabase } from '../lib/supabase';
 import styles from '../components/style';
 
 export default function OrcamentoScreen() {
-  const [valorOrcamento, setValorOrcamento] = useState('');
-  const [orcamentoAtual, setOrcamentoAtual] = useState(null);
+  const [valorReceita, setValorReceita] = useState('');
+  const [valorDespesa, setValorDespesa] = useState('');
+  const [totalReceitas, setTotalReceitas] = useState(0);
+  const [totalDespesas, setTotalDespesas] = useState(0);
+  const [porcentagemGasta, setPorcentagemGasta] = useState(null);
 
   useEffect(() => {
-    buscarOrcamento();
+    calcularResumo();
   }, []);
 
-  const buscarOrcamento = async () => {
-    const { data, error } = await supabase
-      .from('orcamento')
-      .select('*')
-      .limit(1)
-      .single();
+  const calcularResumo = async () => {
+    const { data: receitas, error: errorReceitas } = await supabase
+      .from('receitas')
+      .select('valor');
 
-    if (error && error.code !== 'PGRST116') {
-      Alert.alert('Erro ao buscar orçamento', error.message);
-    } else {
-      setOrcamentoAtual(data || null);
-    }
-  };
+    const { data: despesas, error: errorDespesas } = await supabase
+      .from('despesas')
+      .select('valor');
 
-  const salvarOrcamento = async () => {
-    const valor = parseFloat(valorOrcamento);
-
-    if (isNaN(valor)) {
-      Alert.alert('Erro', 'Digite um valor válido');
+    if (errorReceitas || errorDespesas) {
+      Alert.alert('Erro ao buscar dados');
       return;
     }
 
-    let error;
+    const somaReceitas = receitas.reduce((acc, item) => acc + item.valor, 0);
+    const somaDespesas = despesas.reduce((acc, item) => acc + item.valor, 0);
 
-    if (orcamentoAtual) {
-      // Atualizar orçamento existente
-      ({ error } = await supabase
-        .from('orcamento')
-        .update({ valor })
-        .eq('id', orcamentoAtual.id));
-    } else {
-      // Inserir novo orçamento
-      ({ error } = await supabase.from('orcamento').insert([{ valor }]));
-    }
+    setTotalReceitas(somaReceitas);
+    setTotalDespesas(somaDespesas);
 
-    if (error) {
-      Alert.alert('Erro ao salvar orçamento', error.message);
+    if (somaReceitas > 0) {
+      const porcentagem = (somaDespesas / somaReceitas) * 100;
+      setPorcentagemGasta(porcentagem.toFixed(2));
     } else {
-      setValorOrcamento('');
-      buscarOrcamento();
+      setPorcentagemGasta(null);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Orçamento Mensal</Text>
+    <View style={styles.containerResumo}>
+      <Text style={styles.titulo}>Resumo Financeiro</Text>
 
-      {orcamentoAtual && orcamentoAtual.valor !== undefined && (
-        <Text style={{ marginBottom: 10 }}>
-          Orçamento atual: R$ {orcamentoAtual.valor.toFixed(2)}
-        </Text>
+      <Text style={styles.textoResumo}>Total Receitas: R$ {totalReceitas.toFixed(2)}</Text>
+      <Text style={styles.textoResumo}>Total Despesas: R$ {totalDespesas.toFixed(2)}</Text>
+
+      {porcentagemGasta !== null ? (
+        <Text style={styles.porcentagem}>Você gastou {porcentagemGasta}% da sua renda.</Text>
+      ) : (
+        <Text style={styles.porcentagem}>Sem dados suficientes para cálculo.</Text>
       )}
 
-      <TextInput
-        style={styles.input}
-        placeholder="Novo valor"
-        keyboardType="numeric"
-        value={valorOrcamento}
-        onChangeText={setValorOrcamento}
-      />
-
-      <Button title="Salvar Orçamento" onPress={salvarOrcamento} />
+      <Button title="Atualizar" onPress={calcularResumo} color="#3119FC" />
     </View>
   );
 }
